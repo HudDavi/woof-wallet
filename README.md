@@ -14,14 +14,14 @@
 
 A browser extension wallet to send and receive doginals.
 
-[Download for Firefox](https://addons.mozilla.org/en-US/firefox/addon/very-woof-wallet)
+[Download for Firefox](https://addons.mozilla.org/en-US/firefox/addon/very-woof-wallet-v2/)
 
 ## How to install locally?
 
 You can easily install this Firefox extension locally. To do this, follow the steps below:
 
-- [Download](https://addons.mozilla.org/firefox/downloads/file/4111171/very_woof_wallet-0.9.2.zip) as ZIP archive and unzip it
-- Open Firefox 
-- Open about:debugging#/runtime/this-firefox in a new tab
+- [Download]() as ZIP archive and unzip it
+- Open Firefox
+- Open `about:debugging#/runtime/this-firefox` in a new tab
 - Click on "Load Temporary Add-on..." Button
 - Select "Very Woof Wallet" Manifest.json file on your disc
