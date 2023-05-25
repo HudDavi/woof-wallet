@@ -12,16 +12,16 @@
 
 # Very Woof Wallet
 
-A browser extension wallet to send and receive doginals.
+We're currently working on making the Very Woof Wallet an official extension for Mozilla Firefox. It might take a while, so in the meantime, we offer a locally installable version of the Very Woof Wallet.
 
-[Download for Firefox](https://addons.mozilla.org/en-US/firefox/addon/very-woof-wallet-v2/)
+## Local Installation Guide
 
-## How to install locally?
+You can set up this Firefox extension on your system easily by following these steps:
 
-You can easily install this Firefox extension locally. To do this, follow the steps below:
+- [Download](https://github.com/verydogelabs/woof-wallet/raw/main/very-woof-wallet.zip) the ZIP archive of the extension and extract it.
+- Launch Firefox.
+- Open a new tab and enter `about:debugging#/runtime/this-firefox` in the address bar.
+- Click on the "Load Temporary Add-on..." button.
+- Navigate to and select the "manifest.json" file from the extracted "Very Woof Wallet" folder.
 
-- [Download]() as ZIP archive and unzip it
-- Open Firefox
-- Open `about:debugging#/runtime/this-firefox` in a new tab
-- Click on "Load Temporary Add-on..." Button
-- Select "Very Woof Wallet" Manifest.json file on your disc
+This will load the Very Woof Wallet extension to your Firefox browser for local use. Please note that this is a temporary installation, and the extension would need to be reloaded after every restart of the Firefox browser.
