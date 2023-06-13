@@ -423,6 +423,7 @@ class Model {
       });
 
       tx = new Transaction();
+      tx.feePerKb(Transaction.FEE_PER_KB);
       tx.from(inscriptionUtxo);
       tx.from(fundingUtxos);
       tx.to(address, Transaction.DUST_AMOUNT);

@@ -1,9 +1,5 @@
 body {
   background-color: #feffff;
-  background-image: url("images/logo.svg");
-  background-size: 800px 1000px;
-  background-position: left center;
-  background-repeat: no-repeat;
   color: black;
   width: 300px;
   height: 400px;
