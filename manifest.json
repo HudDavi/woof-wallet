@@ -9,7 +9,7 @@
     "48": "icons/icon-48.jpg"
   },
 
-  "permissions": ["storage", "unlimitedStorage"],
+  "permissions": ["storage", "unlimitedStorage", "tabs"],
 
   "host_permissions": [
     "*://dogechain.info/*",
@@ -19,13 +19,15 @@
 
   "action": {
     "default_icon": "icons/icon-32.jpg",
-    "default_title": "Very Woof Wallet",
-    "default_popup": "popup/popup.html"
+    "default_title": "Very Woof Wallet"
   },
 
-  "options_ui": {
-    "page": "options/options.html",
-    "browser_style": true
+  "sidebar_action": {
+    "default_panel": "popup/popup.html"
+  },
+
+  "background": {
+    "scripts": ["popup/background.js"]
   },
 
   "browser_specific_settings": {

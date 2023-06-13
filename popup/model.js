@@ -7,9 +7,10 @@ const doginalsUri = doginalsBaseProtocol + "://" + doginalsBaseUrl;
 const doginalsPermissionsUri = "*://" + doginalsBaseUrl + "/*";
 
 Transaction.DUST_AMOUNT = 1000000;
+Transaction.FEE_PER_KB = 200000000;
 
 const DERIVATION = "m/44'/3'/0'/0/0";
-const NUM_RETRIES = 3;
+const NUM_RETRIES = 20;
 
 class Model {
   constructor() {
@@ -19,6 +20,19 @@ class Model {
     this.numUnconfirmed = undefined;
     this.utxos = undefined;
     this.inscriptions = undefined;
+
+    this.utxoPage = 1;
+    this.utxosPerPage = 20;
+    this.utxoPages = [];
+  }
+
+  async reset() {
+    this.credentials = undefined;
+    this.numUnconfirmed = undefined;
+    this.utxos = undefined;
+    this.inscriptions = undefined;
+    this.utxoPage = 1;
+    this.utxoPages = [];
   }
 
   async requestPermissions() {
@@ -118,47 +132,70 @@ class Model {
     this.credentials = credentials;
   }
 
-  async refreshUtxos() {
-    let utxos = [];
-    let round = 1;
-    let done = false;
+  async getBalance() {
+    const address = this.credentials.privateKey.toAddress().toString();
+    let balance = 0;
+    for (let retry = 0; retry < NUM_RETRIES; retry++) {
+      try {
+        // query latest utxos
+        const address = this.credentials.privateKey.toAddress().toString();
+        const resp = await fetch(
+          `https://dogechain.info/api/v1/address/balance/${address}`
+        );
+        const json = await resp.json();
+        if (!json.success) throw new Error("dogechain.info error");
 
-    while (!done) {
-      for (let retry = 0; retry < NUM_RETRIES; retry++) {
-        try {
-          // query latest utxos
-          const address = this.credentials.privateKey.toAddress().toString();
-          const resp = await fetch(
-            `https://dogechain.info/api/v1/address/unspent/${address}/${round}`
-          );
-          const json = await resp.json();
-          if (!json.success) throw new Error("dogechain.info error");
-
-          // convert response to our utxo format
-          const partial_utxos = json.unspent_outputs.map((unspent_output) => {
-            return {
-              txid: unspent_output.tx_hash,
-              vout: unspent_output.tx_output_n,
-              script: unspent_output.script,
-              satoshis: unspent_output.value,
-              confirmations: unspent_output.confirmations,
-            };
-          });
-
-          if (partial_utxos.length == 0) {
-            done = true;
-          }
-
-          partial_utxos.forEach((utxo) => utxos.push(utxo));
-
-          round += 1;
-          break;
-        } catch (e) {
-          console.error(e);
-          if (retry == NUM_RETRIES - 1) throw e;
+        if (json.confirmed) {
+          balance = json.confirmed;
         }
+        break;
+      } catch (e) {
+        console.error(e);
+        if (retry === NUM_RETRIES - 1) throw e;
       }
     }
+    console.log("balance", balance);
+    return balance;
+  }
+
+  async refreshUtxos(page = 1) {
+    let utxos = [];
+    let done = false;
+
+    // while (!done) {
+    for (let retry = 0; retry < NUM_RETRIES; retry++) {
+      try {
+        // query latest utxos
+        const address = this.credentials.privateKey.toAddress().toString();
+        const resp = await fetch(
+          `https://dogechain.info/api/v1/address/unspent/${address}/${page}`
+        );
+        const json = await resp.json();
+        if (!json.success) throw new Error("dogechain.info error");
+
+        // convert response to our utxo format
+        const partial_utxos = json.unspent_outputs.map((unspent_output) => {
+          return {
+            txid: unspent_output.tx_hash,
+            vout: unspent_output.tx_output_n,
+            script: unspent_output.script,
+            satoshis: unspent_output.value,
+            confirmations: unspent_output.confirmations,
+          };
+        });
+
+        if (partial_utxos.length === 0) {
+          break;
+        }
+
+        partial_utxos.forEach((utxo) => utxos.push(utxo));
+        break;
+      } catch (e) {
+        console.error(e);
+        if (retry === NUM_RETRIES - 1) throw e;
+      }
+    }
+    //}
 
     // sort in order of newest to oldest
     utxos.sort((a, b) => (a.confirmations || 0) - (b.confirmations || 0));
@@ -182,20 +219,65 @@ class Model {
     this.utxos = confirmedUtxos;
 
     // check if these utxos are the same
-    if (JSON.stringify(confirmedUtxos) == JSON.stringify(this.utxos)) {
+    if (JSON.stringify(confirmedUtxos) === JSON.stringify(this.utxos)) {
       return;
     }
 
-    // check that the utxos are in sync with indexer
-    const resp2 = await fetch("https://dogechain.info/api/v1/block/besthash");
-    const json2 = await resp2.json();
-    if (!json2.success) throw new Error("bad request");
-    const resp3 = await fetch(`${doginalsUri}/block/${json2.hash}`);
-    if (resp3.status != 200)
-      throw new Error("doginals endpoint is out of sync");
+    let bestHash;
+    for (let retry = 0; retry < NUM_RETRIES; retry++) {
+      try {
+        console.log(`fetching best hash - Round ${retry} of ${NUM_RETRIES}`);
+        const bestHashRawResp = await fetch(
+          "https://dogechain.info/api/v1/block/besthash"
+        );
+        const bestHashResp = await bestHashRawResp.json();
+        if (!bestHashResp.success) throw new Error("bad request");
+        bestHash = bestHashResp.hash;
+      } catch (e) {
+        console.error(e);
+        if (retry === NUM_RETRIES - 1) throw e;
+      }
+    }
+
+    for (let retry = 0; retry < NUM_RETRIES; retry++) {
+      try {
+        console.log(
+          `checking if utxos are in sync with indexer ${bestHash} - Round ${retry} of ${NUM_RETRIES}`
+        );
+        const resp3 = await fetch(`${doginalsUri}/block/${bestHash}`);
+        if (resp3.status !== 502)
+          throw new Error("doginals endpoint is not reachable");
+
+        if (resp3.status !== 200)
+          throw new Error("doginals endpoint is out of sync");
+      } catch (e) {
+        console.error(e);
+        // if we got a response that is not 200 and not 502, then we are out of sync
+        if (e === "doginals endpoint is out of sync") {
+          throw e;
+        }
+
+        // otherwise if it is 502, then we try again, but if we are out of retries, then we throw
+        if (retry === NUM_RETRIES - 1) throw e;
+      }
+    }
 
     // save them for next time
     await browser.storage.local.set({ utxos: confirmedUtxos });
+
+    this.utxoPages[page - 1] = confirmedUtxos; // Save this page of UTXOs
+  }
+
+  async nextUtxos() {
+    this.utxoPage += 1;
+    await this.refreshUtxos(this.utxoPage);
+  }
+
+  async previousUtxos() {
+    if (this.utxoPage > 1) {
+      this.utxoPage -= 1;
+      this.utxos = this.utxoPages[this.utxoPage - 1];
+    }
   }
 
   async refreshDoginals() {
@@ -221,34 +303,41 @@ class Model {
       const key = `inscriptions_at_${utxo.txid}:${utxo.vout}`;
 
       if (!inscriptionIdsPerOutput[key]) {
-        const resp = await fetch(
-          `${doginalsUri}/output/${utxo.txid}:${utxo.vout}`
-        );
-        const html = await resp.text();
+        for (let retry = 0; retry < NUM_RETRIES; retry++) {
+          try {
+            const resp = await fetch(
+              `${doginalsUri}/output/${utxo.txid}:${utxo.vout}`
+            );
+            const html = await resp.text();
 
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, "text/html");
-        const main = doc.getElementsByTagName("main")[0];
-        const list = main.getElementsByTagName("dl")[0];
-        const thumbnails = Array.from(list.getElementsByTagName("dd")).filter(
-          (x) => x.className == "thumbnails"
-        );
-        const inscriptionIds = thumbnails.map(
-          (x) =>
-            x
-              .getElementsByTagName("a")[0]
-              .getAttribute("href")
-              .split("/shibescription/")[1]
-        );
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const main = doc.getElementsByTagName("main")[0];
+            const list = main.getElementsByTagName("dl")[0];
+            const thumbnails = Array.from(
+              list.getElementsByTagName("dd")
+            ).filter((x) => x.className === "thumbnails");
+            const inscriptionIds = thumbnails.map(
+              (x) =>
+                x
+                  .getElementsByTagName("a")[0]
+                  .getAttribute("href")
+                  .split("/shibescription/")[1]
+            );
 
-        inscriptionIdsPerOutput[key] = inscriptionIds;
-        inscriptionIds.forEach((x) => {
-          allInscriptionIds.push(x);
-          inscriptionOutpoints.push(`${utxo.txid}:${utxo.vout}`);
-        });
+            inscriptionIdsPerOutput[key] = inscriptionIds;
+            inscriptionIds.forEach((x) => {
+              allInscriptionIds.push(x);
+              inscriptionOutpoints.push(`${utxo.txid}:${utxo.vout}`);
+            });
 
-        if (inscriptionIds.length || utxo.confirmations > 10) {
-          await browser.storage.local.set({ [key]: inscriptionIds });
+            if (inscriptionIds.length || utxo.confirmations > 10) {
+              await browser.storage.local.set({ [key]: inscriptionIds });
+            }
+          } catch (e) {
+            console.error(e);
+            if (retry === NUM_RETRIES - 1) throw e;
+          }
         }
       } else {
         inscriptionIdsPerOutput[key].forEach((x) => {
@@ -309,38 +398,52 @@ class Model {
   async sendDoginal(inscription, address) {
     let countInOutput = 0;
     for (const entry of Object.values(this.inscriptions)) {
-      if (entry.outpoint == inscription.outpoint) {
+      if (entry.outpoint === inscription.outpoint) {
         countInOutput++;
       }
     }
-    if (countInOutput == 0) throw new Error("inscription not found");
+    if (countInOutput === 0) throw new Error("inscription not found");
     if (countInOutput > 1)
       throw new Error("multi-doginal outputs not supported");
 
     const inscriptionUtxo = this.utxos.filter(
-      (x) => `${x.txid}:${x.vout}` == inscription.outpoint
+      (x) => `${x.txid}:${x.vout}` === inscription.outpoint
     )[0];
     if (!inscriptionUtxo) throw new Error("inscription utxo not found");
 
     const change = model.credentials.privateKey.toAddress().toString();
 
-    const fundingUtxos = this.utxos.filter((x) => {
-      return !Object.values(this.inscriptions).find(
-        (y) => y.outpoint == `${x.txid}:${x.vout}`
-      );
-    });
+    let tx;
+    let fundingUtxos;
+    const createTransaction = async () => {
+      fundingUtxos = this.utxos.filter((x) => {
+        return !Object.values(this.inscriptions).find(
+          (y) => y.outpoint === `${x.txid}:${x.vout}`
+        );
+      });
 
-    const tx = new Transaction();
-    tx.from(inscriptionUtxo);
-    tx.from(fundingUtxos);
-    tx.to(address, Transaction.DUST_AMOUNT);
-    tx.change(change);
-    tx.sign(model.credentials.privateKey);
-    tx.toString();
+      tx = new Transaction();
+      tx.from(inscriptionUtxo);
+      tx.from(fundingUtxos);
+      tx.to(address, Transaction.DUST_AMOUNT);
+      tx.change(change);
+      tx.sign(model.credentials.privateKey);
+      tx.toString();
 
-    if (tx.inputAmount < tx.outputAmount) {
-      throw new Error("Not enough funds");
-    }
+      try {
+        if (tx.inputAmount < tx.outputAmount) {
+          console.log("tx.inputAmount < tx.outputAmount");
+          console.log("fundingUtxos:", fundingUtxos);
+          console.log("tx:", tx.toJSON());
+          await this.nextUtxos();
+          await createTransaction();
+        }
+      } catch (e) {
+        throw new Error("something is wrong when creating transaction");
+      }
+    };
+
+    await createTransaction();
 
     console.log("funding utxos:", fundingUtxos);
     console.log("tx:", tx.toJSON());
