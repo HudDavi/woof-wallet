@@ -7,7 +7,7 @@ const doginalsUri = doginalsBaseProtocol + "://" + doginalsBaseUrl;
 const doginalsPermissionsUri = "*://" + doginalsBaseUrl + "/*";
 
 Transaction.DUST_AMOUNT = 1000000;
-Transaction.FEE_PER_KB = 80000000;
+const FEE_PER_KB = 100000000;
 
 const DERIVATION = "m/44'/3'/0'/0/0";
 const NUM_RETRIES = 20;
@@ -423,7 +423,7 @@ class Model {
       });
 
       tx = new Transaction();
-      tx.feePerKb(Transaction.FEE_PER_KB);
+      tx.feePerKb(FEE_PER_KB);
       tx.from(inscriptionUtxo);
       tx.from(fundingUtxos);
       tx.to(address, Transaction.DUST_AMOUNT);

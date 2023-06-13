@@ -106,6 +106,16 @@ button:disabled {
   background-color: white;
 }
 
+#current-page {
+  width: 40px;
+}
+
+#current-page-search {
+  width: 40px;
+  height: 40px;
+  top: -20px;
+}
+
 textarea {
   width: 80%;
   font-size: 1.3em;
@@ -137,6 +147,11 @@ textarea {
 }
 
 #footer {
+  display: flex;
+  align-items: center !important;
+}
+
+#footer-search {
   display: flex;
   align-items: center !important;
 }

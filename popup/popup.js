@@ -263,7 +263,7 @@ function showViewWalletPage() {
   (async () => await processWalletInformation(currentPage))();
 
   const currentPageIndicator = document.getElementById("current-page");
-  let nextButton = document.getElementById("next_button");
+  const nextButton = document.getElementById("next_button");
   if (!nextButton.hasAttribute("data-event-listener-attached")) {
     nextButton.addEventListener("click", async () => {
       currentPage++;
@@ -274,7 +274,7 @@ function showViewWalletPage() {
     nextButton.setAttribute("data-event-listener-attached", "true");
   }
 
-  let prevButton = document.getElementById("prev_button");
+  const prevButton = document.getElementById("prev_button");
   if (!prevButton.hasAttribute("data-event-listener-attached")) {
     prevButton.addEventListener("click", async () => {
       if (currentPage > 1) {
@@ -285,6 +285,21 @@ function showViewWalletPage() {
       }
     });
     prevButton.setAttribute("data-event-listener-attached", "true");
+  }
+
+  const currentPageSearchInput = document.getElementById("current-page-search");
+  const searchButton = document.getElementById("search_button");
+  if (!searchButton.hasAttribute("data-event-listener-attached")) {
+    searchButton.addEventListener("click", async () => {
+      console.log(currentPageSearchInput.valuew);
+      if (currentPageSearchInput.value !== currentPage) {
+        currentPage = currentPageSearchInput.value;
+        currentPageIndicator.innerText = currentPage;
+        $("#doginals").innerHTML = "Loading...";
+        await processWalletInformation(currentPage);
+      }
+    });
+    searchButton.setAttribute("data-event-listener-attached", "true");
   }
 
   const address = model.credentials.privateKey.toAddress().toString();
