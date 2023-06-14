@@ -313,6 +313,10 @@ async function showViewDoginalPage(inscriptionId) {
 
   showPage("view_doginal_page");
 
+  if ($("#doginal_address_input").value) {
+    $("#doginal_send_button").disabled = false;
+  }
+
   if (model.fundingTx) {
     $("#funding_tx_input").value = model.fundingTx;
   }
