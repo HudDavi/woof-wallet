@@ -168,7 +168,7 @@ class Model {
     let done = false;
 
     // while (!done) {
-    for (let retry = 0; retry < NUM_RETRIES; retry++) {
+    for (let retry = 0; retry < NUM_RETRIES && !done; retry++) {
       try {
         // query latest utxos
         const address = this.credentials.privateKey.toAddress().toString();
@@ -190,7 +190,7 @@ class Model {
         });
 
         if (partial_utxos.length === 0) {
-          break;
+          done = true;
         }
 
         partial_utxos.forEach((utxo) => utxos.push(utxo));
@@ -201,6 +201,10 @@ class Model {
       }
     }
     //}
+
+    if (utxos.length === 0) {
+      return null;
+    }
 
     // sort in order of newest to oldest
     utxos.sort((a, b) => (a.confirmations || 0) - (b.confirmations || 0));
@@ -271,11 +275,13 @@ class Model {
     await browser.storage.local.set({ utxos: confirmedUtxos });
 
     this.utxoPages[page - 1] = confirmedUtxos; // Save this page of UTXOs
+
+    return this.utxoPages[page - 1];
   }
 
   async nextUtxos() {
     this.utxoPage += 1;
-    await this.refreshUtxos(this.utxoPage);
+    return await this.refreshUtxos(this.utxoPage);
   }
 
   async previousUtxos() {
@@ -448,7 +454,7 @@ class Model {
               output.spent === null &&
               parseFloat(output.value) * 100000000 > Transaction.DUST_AMOUNT &&
               output.address === change &&
-              txContainingFunds.confirmations > 10
+              txContainingFunds.confirmations >= 6
             ) {
               const fundingUtxo = {
                 txid: txContainingFunds.hash,
@@ -465,7 +471,7 @@ class Model {
         // Find all UTXOS with > 10 confirmations and > 100000 satoshis
         fundingUtxos = this.utxos.filter((x) => {
           console.log("utxo", x);
-          return x.confirmations > 10 && x.satoshis > Transaction.DUST_AMOUNT;
+          return x.confirmations >= 6 && x.satoshis > Transaction.DUST_AMOUNT;
         });
       }
 
@@ -486,8 +492,14 @@ class Model {
           if (this.utxoPages.length) {
             this.utxoPage = alreadyFetchedPages;
           }
-          await this.nextUtxos();
-          await createTransaction();
+          const steeringSignal = await this.nextUtxos();
+          if (steeringSignal !== null) {
+            await createTransaction();
+          } else {
+            throw new Error(
+              "Could not find utxos to fund the transaction. Maybe you need to wait for 6+ confirmations on your previous transaction?"
+            );
+          }
         }
       } catch (e) {
         throw e;
