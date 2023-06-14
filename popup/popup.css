@@ -116,12 +116,19 @@ button:disabled {
   top: -20px;
 }
 
+#funding_tx_explanation {
+  width: 80%;
+  ont-size: 1.3em;
+  flex: 1;
+  margin-bottom: 20px;
+  resize: none;
+}
+
 textarea {
   width: 80%;
   font-size: 1.3em;
   flex: 1;
   margin-bottom: 20px;
-  resize: none;
 }
 
 #header {

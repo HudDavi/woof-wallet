@@ -15,8 +15,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const backToWalletButton1 = document.getElementById("back_to_wallet_button1");
   const backToWalletButton2 = document.getElementById("back_to_wallet_button2");
   const backToWalletButton3 = document.getElementById("back_to_wallet_button3");
-  const optionsIcon = document.getElementById("options_icon");
+  const fundingTxButton = document.getElementById("set_funding_tx");
 
+  const optionsIcon = document.getElementById("options_icon");
   optionsButton.addEventListener("click", function () {
     const mainPage = document.getElementById("main_page");
     const optionsPage = document.getElementById("options_page");
@@ -34,19 +35,16 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   backToWalletButton1.addEventListener("click", function () {
     $("#doginal_address_input").disabled = false;
-    $("#doginal_address_input").value = "";
     $("#doginal_send_button").disabled = false;
     showViewWalletPage();
   });
   backToWalletButton2.addEventListener("click", function () {
     $("#doginal_address_input").disabled = false;
-    $("#doginal_address_input").value = "";
     $("#doginal_send_button").disabled = false;
     showViewWalletPage();
   });
   backToWalletButton3.addEventListener("click", function () {
     $("#doginal_address_input").disabled = false;
-    $("#doginal_address_input").value = "";
     $("#doginal_send_button").disabled = false;
     showViewWalletPage();
   });
@@ -315,9 +313,18 @@ async function showViewDoginalPage(inscriptionId) {
 
   showPage("view_doginal_page");
 
+  if (model.fundingTx) {
+    $("#funding_tx_input").value = model.fundingTx;
+  }
+
   $("#doginal_send_button").onclick = async () => {
     $("#doginal_address_input").disabled = true;
     $("#doginal_send_button").disabled = true;
+
+    const fundingTx = $("#funding_tx_input").value;
+    if (fundingTx) {
+      model.setFundingTx(fundingTx);
+    }
 
     const address = $("#doginal_address_input").value;
     const inscription = (await browser.storage.local.get(key))[key];

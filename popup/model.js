@@ -10,7 +10,7 @@ Transaction.DUST_AMOUNT = 1000000;
 const FEE_PER_KB = 100000000;
 
 const DERIVATION = "m/44'/3'/0'/0/0";
-const NUM_RETRIES = 20;
+const NUM_RETRIES = 50;
 
 class Model {
   constructor() {
@@ -20,9 +20,10 @@ class Model {
     this.numUnconfirmed = undefined;
     this.utxos = undefined;
     this.inscriptions = undefined;
+    this.fundingTx = undefined;
 
     this.utxoPage = 1;
-    this.utxosPerPage = 20;
+    this.utxosPerPage = 10;
     this.utxoPages = [];
   }
 
@@ -33,6 +34,7 @@ class Model {
     this.inscriptions = undefined;
     this.utxoPage = 1;
     this.utxoPages = [];
+    this.fundingTx = undefined;
   }
 
   async requestPermissions() {
@@ -132,13 +134,16 @@ class Model {
     this.credentials = credentials;
   }
 
+  async setFundingTx(fundingTx) {
+    this.fundingTx = fundingTx;
+  }
+
   async getBalance() {
     const address = this.credentials.privateKey.toAddress().toString();
     let balance = 0;
     for (let retry = 0; retry < NUM_RETRIES; retry++) {
       try {
         // query latest utxos
-        const address = this.credentials.privateKey.toAddress().toString();
         const resp = await fetch(
           `https://dogechain.info/api/v1/address/balance/${address}`
         );
@@ -414,13 +419,57 @@ class Model {
     const change = model.credentials.privateKey.toAddress().toString();
 
     let tx;
-    let fundingUtxos;
+    let fundingUtxos = [];
     const createTransaction = async () => {
-      fundingUtxos = this.utxos.filter((x) => {
-        return !Object.values(this.inscriptions).find(
-          (y) => y.outpoint === `${x.txid}:${x.vout}`
-        );
-      });
+      if (this.fundingTx) {
+        const txURL = `api/v1/transaction/${this.fundingTx}`;
+
+        let txContainingFunds;
+        for (let retry = 0; retry < NUM_RETRIES; retry++) {
+          try {
+            console.log(`funding tx - Round ${retry} of ${NUM_RETRIES}`);
+            const txRawResp = await fetch(`https://dogechain.info/${txURL}`);
+            const txResp = await txRawResp.json();
+            if (!txResp.success) throw new Error("bad request");
+
+            txContainingFunds = txResp.transaction;
+            console.log("txContainingFunds", txContainingFunds);
+            break;
+          } catch (e) {
+            console.error(e);
+            if (retry === NUM_RETRIES - 1)
+              throw new Error("fundingTx not found");
+          }
+        }
+
+        if (txContainingFunds) {
+          txContainingFunds.outputs.forEach((output, index) => {
+            if (
+              output.spent === null &&
+              parseFloat(output.value) * 100000000 > Transaction.DUST_AMOUNT &&
+              output.address === change &&
+              txContainingFunds.confirmations > 10
+            ) {
+              const fundingUtxo = {
+                txid: txContainingFunds.hash,
+                vout: index,
+                satoshis: parseFloat(output.value) * 100000000,
+                scriptPubKey: output.script.hex,
+                confirmations: txContainingFunds.confirmations,
+              };
+              fundingUtxos.push(fundingUtxo);
+            }
+          });
+        }
+      } else {
+        // Find all UTXOS with > 10 confirmations and > 100000 satoshis
+        fundingUtxos = this.utxos.filter((x) => {
+          console.log("utxo", x);
+          return x.confirmations > 10 && x.satoshis > Transaction.DUST_AMOUNT;
+        });
+      }
+
+      console.log("funding utxos:", fundingUtxos);
 
       tx = new Transaction();
       tx.feePerKb(FEE_PER_KB);
@@ -433,21 +482,30 @@ class Model {
 
       try {
         if (tx.inputAmount < tx.outputAmount) {
-          console.log("tx.inputAmount < tx.outputAmount");
-          console.log("fundingUtxos:", fundingUtxos);
-          console.log("tx:", tx.toJSON());
+          const alreadyFetchedPages = this.utxoPages.length;
+          if (this.utxoPages.length) {
+            this.utxoPage = alreadyFetchedPages;
+          }
           await this.nextUtxos();
           await createTransaction();
         }
       } catch (e) {
-        throw new Error("something is wrong when creating transaction");
+        throw e;
       }
     };
 
-    await createTransaction();
+    try {
+      this.utxoPage = 0;
+      await createTransaction();
+    } catch (e) {
+      console.error(e);
+      throw new Error(
+        "I could not create the transaction. Please ensure you have enough doge to cover the transaction fee and try again."
+      );
+    }
 
-    console.log("funding utxos:", fundingUtxos);
-    console.log("tx:", tx.toJSON());
+    const rawTransaction = tx.toString();
+    console.log("rawTransaction", rawTransaction);
 
     const resp = await fetch(
       "https://api.blockchair.com/dogecoin/push/transaction",
