@@ -1,4 +1,4 @@
-![woof wallet icon](icons/logo.jpg)
+![woof wallet icon](icons/logo.png)
 
 **Meet the premier self-custodial solution for Doginals on the Dogecoin network.** As the leading wallet in the drc-20 ecosystem, **Very Woof Wallet** is designed to provide a secure, user-friendly platform for accessing, storing, and trading your beloved Doginals.
 

@@ -9,9 +9,53 @@ window.addEventListener("unhandledrejection", (event) =>
   showErrorPage(event.reason.message)
 );
 
+// Show the main and options pages on button click
+document.addEventListener("DOMContentLoaded", function () {
+  const optionsButton = document.getElementById("options_button");
+  const backToWalletButton1 = document.getElementById("back_to_wallet_button1");
+  const backToWalletButton2 = document.getElementById("back_to_wallet_button2");
+  const backToWalletButton3 = document.getElementById("back_to_wallet_button3");
+  const fundingTxButton = document.getElementById("set_funding_tx");
+
+  const optionsIcon = document.getElementById("options_icon");
+  optionsButton.addEventListener("click", function () {
+    const mainPage = document.getElementById("main_page");
+    const optionsPage = document.getElementById("options_page");
+    if (mainPage.style.display === "none") {
+      mainPage.style.display = "block";
+      optionsPage.style.display = "none";
+      optionsIcon.src = "images/gear.png";
+    } else {
+      mainPage.style.display = "none";
+      optionsPage.style.display = "block";
+      optionsIcon.src = "images/back.png";
+
+      loadWallet().catch((e) => console.error(e));
+    }
+  });
+  backToWalletButton1.addEventListener("click", function () {
+    $("#doginal_address_input").disabled = false;
+    $("#doginal_send_button").disabled = false;
+    showViewWalletPage();
+  });
+  backToWalletButton2.addEventListener("click", function () {
+    $("#doginal_address_input").disabled = false;
+    $("#doginal_send_button").disabled = false;
+    showViewWalletPage();
+  });
+  backToWalletButton3.addEventListener("click", function () {
+    $("#doginal_address_input").disabled = false;
+    $("#doginal_send_button").disabled = false;
+    showViewWalletPage();
+  });
+});
+
 model.load().then(reloadWallet);
 
 function reloadWallet() {
+  document.getElementById("main_page").style.display = "flex";
+  document.getElementById("options_page").style.display = "none";
+
   if (!model.hasAllPermissions) {
     showGrantPermissionsPage();
   } else if (!model.acceptedTerms) {
@@ -117,8 +161,144 @@ function showImportTwelveWordsPage() {
   };
 }
 
+let currentPage = 1;
 function showViewWalletPage() {
   showPage("view_wallet_page");
+
+  let balance = 0;
+  (async () => {
+    balance = await model.getBalance();
+    $("#doge_balance").innerHTML = `${balance} DOGE`;
+  })();
+
+  const processWalletInformation = async (page) => {
+    await model.refreshUtxos(page).then(async () => {
+      await model.refreshDoginals().then(() => {
+        if (Object.keys(model.inscriptions).length) {
+          $("#doginals").innerHTML = "";
+
+          if (model.numUnconfirmed > 0) {
+            const pending = document.createElement("div");
+            pending.classList.add("pending");
+            const suf = model.numUnconfirmed > 1 ? "s" : "";
+            pending.innerHTML = `${model.numUnconfirmed} unconfirmed transaction${suf}...`;
+            $("#doginals").appendChild(pending);
+          }
+
+          let row;
+          let i = 0;
+
+          for (const inscription of Object.values(model.inscriptions)) {
+            if (!row) {
+              row = document.createElement("div");
+              row.classList.add("doginals_row");
+              spacer = document.createElement("div");
+              spacer.classList.add("doginals_row_spacer");
+              row.appendChild(spacer);
+              $("#doginals").appendChild(row);
+            }
+
+            const doginal = document.createElement("div");
+            doginal.classList.add("doginal");
+            doginal.classList.remove("inscription_text");
+            if (inscription.data.toLowerCase().startsWith("data:image/")) {
+              doginal.style.backgroundImage = `url(${inscription.data})`;
+              if (inscription.data.length < 3000) {
+                doginal.style.imageRendering = "pixelated";
+              }
+            } else if (inscription.data.toLowerCase().startsWith("data:text")) {
+              let parts = inscription.data.slice(5).split(";");
+              let base64text = parts[parts.length - 1];
+              if (base64text.startsWith("base64,"))
+                base64text = base64text.slice("base64,".length);
+              let text = Buffer.from(base64text, "base64").toString("utf8");
+              if (text.startsWith("{") && text.endsWith("}")) {
+                let jsonKeyValuePairs = text
+                  .replace("{", "")
+                  .replace("}", "")
+                  .split(",");
+                doginal.innerHTML = jsonKeyValuePairs.join("<br /><br />");
+              } else {
+                doginal.innerHTML = text;
+              }
+              doginal.classList.add("inscription_text");
+            } else {
+              doginal.innerHTML = inscription.data.slice(5).split(";")[0];
+            }
+            doginal.onclick = function () {
+              showViewDoginalPage(inscription.id);
+            };
+            row.appendChild(doginal);
+
+            if (i % 2 == 1) {
+              spacer = document.createElement("div");
+              spacer.classList.add("doginals_row_spacer");
+              row.appendChild(spacer);
+              row = null;
+            }
+
+            i++;
+          }
+        } else {
+          $("#doginals").innerHTML = "";
+
+          if (model.numUnconfirmed > 0) {
+            const pending = document.createElement("div");
+            pending.classList.add("pending");
+            const suf = model.numUnconfirmed > 1 ? "s" : "";
+            pending.innerHTML = `${model.numUnconfirmed} unconfirmed transaction${suf}...`;
+            $("#doginals").appendChild(pending);
+          } else {
+            $("#doginals").innerHTML = "No doginals";
+          }
+        }
+      });
+    });
+  };
+
+  $("#doginals").innerHTML = "Loading...";
+  // start processing wallet information
+  (async () => await processWalletInformation(currentPage))();
+
+  const currentPageIndicator = document.getElementById("current-page");
+  const nextButton = document.getElementById("next_button");
+  if (!nextButton.hasAttribute("data-event-listener-attached")) {
+    nextButton.addEventListener("click", async () => {
+      currentPage++;
+      currentPageIndicator.innerText = currentPage;
+      $("#doginals").innerHTML = "Loading...";
+      await processWalletInformation(currentPage);
+    });
+    nextButton.setAttribute("data-event-listener-attached", "true");
+  }
+
+  const prevButton = document.getElementById("prev_button");
+  if (!prevButton.hasAttribute("data-event-listener-attached")) {
+    prevButton.addEventListener("click", async () => {
+      if (currentPage > 1) {
+        currentPage--;
+        currentPageIndicator.innerText = currentPage;
+        $("#doginals").innerHTML = "Loading...";
+        await processWalletInformation(currentPage);
+      }
+    });
+    prevButton.setAttribute("data-event-listener-attached", "true");
+  }
+
+  const currentPageSearchInput = document.getElementById("current-page-search");
+  const searchButton = document.getElementById("search_button");
+  if (!searchButton.hasAttribute("data-event-listener-attached")) {
+    searchButton.addEventListener("click", async () => {
+      console.log(currentPageSearchInput.valuew);
+      if (currentPageSearchInput.value !== currentPage) {
+        currentPage = currentPageSearchInput.value;
+        currentPageIndicator.innerText = currentPage;
+        $("#doginals").innerHTML = "Loading...";
+        await processWalletInformation(currentPage);
+      }
+    });
+    searchButton.setAttribute("data-event-listener-attached", "true");
+  }
 
   const address = model.credentials.privateKey.toAddress().toString();
 
@@ -126,93 +306,6 @@ function showViewWalletPage() {
     navigator.clipboard.writeText(address);
 
   $("#address").innerHTML = address;
-
-  model.refreshUtxos().then(() => {
-    let balance =
-      model.utxos.reduce((prev, curr) => prev + curr.satoshis, 0) / 100000000;
-    $("#doge_balance").innerHTML = `${balance} DOGE`;
-
-    model.refreshDoginals().then(() => {
-      if (Object.keys(model.inscriptions).length) {
-        $("#doginals").innerHTML = "";
-
-        if (model.numUnconfirmed > 0) {
-          const pending = document.createElement("div");
-          pending.classList.add("pending");
-          const suf = model.numUnconfirmed > 1 ? "s" : "";
-          pending.innerHTML = `${model.numUnconfirmed} unconfirmed transaction${suf}...`;
-          $("#doginals").appendChild(pending);
-        }
-
-        let row;
-        let i = 0;
-
-        for (const inscription of Object.values(model.inscriptions)) {
-          if (!row) {
-            row = document.createElement("div");
-            row.classList.add("doginals_row");
-            spacer = document.createElement("div");
-            spacer.classList.add("doginals_row_spacer");
-            row.appendChild(spacer);
-            $("#doginals").appendChild(row);
-          }
-
-          const doginal = document.createElement("div");
-          doginal.classList.add("doginal");
-          doginal.classList.remove("inscription_text");
-          if (inscription.data.toLowerCase().startsWith("data:image/")) {
-            doginal.style.backgroundImage = `url(${inscription.data})`;
-            if (inscription.data.length < 3000) {
-              doginal.style.imageRendering = "pixelated";
-            }
-          } else if (inscription.data.toLowerCase().startsWith("data:text")) {
-            let parts = inscription.data.slice(5).split(";");
-            let base64text = parts[parts.length - 1];
-            if (base64text.startsWith("base64,"))
-              base64text = base64text.slice("base64,".length);
-            let text = Buffer.from(base64text, "base64").toString("utf8");
-            if (text.startsWith("{") && text.endsWith("}")) {
-              let jsonKeyValuePairs = text
-                .replace("{", "")
-                .replace("}", "")
-                .split(",");
-              doginal.innerHTML = jsonKeyValuePairs.join("<br /><br />");
-            } else {
-              doginal.innerHTML = text;
-            }
-            doginal.classList.add("inscription_text");
-          } else {
-            doginal.innerHTML = inscription.data.slice(5).split(";")[0];
-          }
-          doginal.onclick = function () {
-            showViewDoginalPage(inscription.id);
-          };
-          row.appendChild(doginal);
-
-          if (i % 2 == 1) {
-            spacer = document.createElement("div");
-            spacer.classList.add("doginals_row_spacer");
-            row.appendChild(spacer);
-            row = null;
-          }
-
-          i++;
-        }
-      } else {
-        $("#doginals").innerHTML = "";
-
-        if (model.numUnconfirmed > 0) {
-          const pending = document.createElement("div");
-          pending.classList.add("pending");
-          const suf = model.numUnconfirmed > 1 ? "s" : "";
-          pending.innerHTML = `${model.numUnconfirmed} unconfirmed transaction${suf}...`;
-          $("#doginals").appendChild(pending);
-        } else {
-          $("#doginals").innerHTML = "No doginals";
-        }
-      }
-    });
-  });
 }
 
 async function showViewDoginalPage(inscriptionId) {
@@ -220,9 +313,22 @@ async function showViewDoginalPage(inscriptionId) {
 
   showPage("view_doginal_page");
 
+  if ($("#doginal_address_input").value) {
+    $("#doginal_send_button").disabled = false;
+  }
+
+  if (model.fundingTx) {
+    $("#funding_tx_input").value = model.fundingTx;
+  }
+
   $("#doginal_send_button").onclick = async () => {
     $("#doginal_address_input").disabled = true;
     $("#doginal_send_button").disabled = true;
+
+    const fundingTx = $("#funding_tx_input").value;
+    if (fundingTx) {
+      model.setFundingTx(fundingTx);
+    }
 
     const address = $("#doginal_address_input").value;
     const inscription = (await browser.storage.local.get(key))[key];
@@ -290,4 +396,42 @@ function showErrorPage(message) {
 function showPage(page) {
   $$(".page").forEach((element) => (element.style.display = "none"));
   $("#" + page).style.display = "flex";
+}
+
+$("#reset_button").disabled = true;
+$("#accept_reset_checkbox").onclick = clickAcceptReset;
+$("#reset_button").onclick = resetWallet;
+
+async function loadWallet() {
+  const values = await browser.storage.local.get([
+    "privkey",
+    "mnemonic",
+    "derivation",
+  ]);
+
+  $("#privkey").value = values.privkey || null;
+  $("#mnemonic").value = values.mnemonic || null;
+  $("#derivation").value = values.derivation || null;
+
+  $("#privkey").disabled = true;
+  $("#mnemonic").disabled = true;
+  $("#derivation").disabled = true;
+}
+
+function clickAcceptReset() {
+  if ($("#accept_reset_checkbox").checked) {
+    $("#reset_button").disabled = false;
+  } else {
+    $("#reset_button").disabled = true;
+  }
+}
+
+async function resetWallet() {
+  await browser.storage.local.clear();
+  $("#privkey").value = null;
+  $("#mnemonic").value = null;
+  $("#derivation").value = null;
+  $("#accept_reset_checkbox").checked = false;
+  $("#reset_button").disabled = true;
+  model.reset().then(reloadWallet);
 }
