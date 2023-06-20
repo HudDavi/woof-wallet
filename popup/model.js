@@ -301,13 +301,18 @@ class Model {
   }
 
   async refreshInscriptionIds() {
+    const allInscriptionIds = [];
+    const inscriptionOutpoints = [];
+
+    if (this.utxos === undefined || this.utxos.length === 0) {
+      return { inscriptionIds: allInscriptionIds, inscriptionOutpoints };
+    }
+
     // read the inscriptions we have for each output
     const keys = this.utxos.map(
       (utxo) => `inscriptions_at_${utxo.txid}:${utxo.vout}`
     );
     const inscriptionIdsPerOutput = await browser.storage.local.get(keys);
-    const allInscriptionIds = [];
-    const inscriptionOutpoints = [];
 
     // if are missing any, download them
     for (const utxo of this.utxos) {
